@@ -38,7 +38,7 @@ namespace Microsoft.Identity.Extensions
         public const int errSecItemNotFound = -25300;
 
         /// <summary>
-        /// Find entry in the keychian
+        /// Find entry in the keychain
         /// </summary>
         /// <param name="keychainOrArray">Store</param>
         /// <param name="serviceNameLength">Length of service name</param>
@@ -107,7 +107,7 @@ namespace Microsoft.Identity.Extensions
         internal static extern int SecKeychainItemDelete(IntPtr itemRef);
 
         /// <summary>
-        /// Free item from memeory
+        /// Free item from memory
         /// </summary>
         /// <param name="attrList">attribute list</param>
         /// <param name="data">Data</param>

@@ -18,7 +18,7 @@ namespace Microsoft.Identity.Extensions
     internal static class MacKeyChain
     {
         /// <summary>
-        /// Writes specifies vaue for given service and account names.
+        /// Writes specifies value for given service and account names.
         /// </summary>
         /// <param name="serviceName">Service name.</param>
         /// <param name="accountName">Account name.</param>
