@@ -1,4 +1,7 @@
-﻿using System;
+﻿// Copyright (c) Microsoft Corporation. All rights reserved.
+// Licensed under the MIT License.
+
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Net;
@@ -24,12 +27,14 @@ namespace Microsoft.Identity.Extensions.Msal.Providers
         private readonly HttpClient _httpClient;
         private readonly IManagedIdentityConfiguration _config;
         private readonly string _overrideClientId;
+        private readonly bool _checkVMListening;
 
-        internal ManagedIdentityProbe(HttpClient httpClient, IManagedIdentityConfiguration config = null, string overrideClientId = null)
+        internal ManagedIdentityProbe(HttpClient httpClient, IManagedIdentityConfiguration config = null, string overrideClientId = null, bool checkVMListening = true)
         {
             _httpClient = httpClient;
             _config = config ?? new DefaultManagedIdentityConfiguration();
             _overrideClientId = overrideClientId;
+            _checkVMListening = checkVMListening;
         }
 
         /// <summary>
@@ -55,7 +60,7 @@ namespace Microsoft.Identity.Extensions.Msal.Providers
             // Check if there is no service listening on VM IP
             //
             // This is a performance optimization to avoid retrying requests to the Managed Identity service
-            if(!IsVMManagedIdentityListening())
+            if(_checkVMListening && !IsVMManagedIdentityListening())
             {
                 return false;
             }
