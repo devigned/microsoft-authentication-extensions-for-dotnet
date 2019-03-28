@@ -16,7 +16,7 @@ namespace Microsoft.Identity.Extensions.Msal.Providers
     /// <summary>
     ///     ServicePrincipalProbe looks to the application setting and environment variables to build a ICredentialProvider.
     /// </summary>
-    public class ServicePrincipalProbe : IProbe
+    public class ServicePrincipalTokenProvider : ITokenProvider
     {
         private readonly IServicePrincipalConfiguration _config;
 
@@ -24,7 +24,7 @@ namespace Microsoft.Identity.Extensions.Msal.Providers
         /// Create a new instance of a ServicePrincipalProbe
         /// </summary>
         /// <param name="config">optional configuration; if not specified the default configuration will use environment variables</param>
-        public ServicePrincipalProbe(IServicePrincipalConfiguration config = null)
+        public ServicePrincipalTokenProvider(IServicePrincipalConfiguration config = null)
         {
             _config = config ?? new DefaultServicePrincipalConfiguration();
         }
@@ -33,8 +33,15 @@ namespace Microsoft.Identity.Extensions.Msal.Providers
         /// <inheritdoc />
         public Task<bool> AvailableAsync() => Task.FromResult(IsClientSecret() || IsClientCertificate());
 
+
         /// <inheritdoc />
-        public async Task<ITokenProvider> ProviderAsync()
+        public async Task<IToken> GetTokenAsync(IEnumerable<string> scopes = null)
+        {
+            var provider = await ProviderAsync().ConfigureAwait(false);
+            return await provider.GetTokenAsync().ConfigureAwait(false);
+        }
+
+        private async Task<InternalServicePrincipalTokenProvider> ProviderAsync()
         {
             var available = await AvailableAsync().ConfigureAwait(false);
             if (!available)
@@ -46,7 +53,7 @@ namespace Microsoft.Identity.Extensions.Msal.Providers
 
             if (!IsClientCertificate())
             {
-                return new ServicePrincipalTokenProvider(authorityWithTenant, _config.TenantId, _config.ClientId, _config.ClientSecret);
+                return new InternalServicePrincipalTokenProvider(authorityWithTenant, _config.TenantId, _config.ClientId, _config.ClientSecret);
             }
 
             X509Certificate2 cert;
@@ -74,7 +81,7 @@ namespace Microsoft.Identity.Extensions.Msal.Providers
                 cert = certs[0];
             }
 
-            return new ServicePrincipalTokenProvider(authorityWithTenant, _config.TenantId, _config.ClientId, cert);
+            return new InternalServicePrincipalTokenProvider(authorityWithTenant, _config.TenantId, _config.ClientId, cert);
         }
 
         private StoreLocation StoreLocationFromEnv
@@ -195,11 +202,11 @@ namespace Microsoft.Identity.Extensions.Msal.Providers
     /// <summary>
     /// ServicePrincipalTokenProvider fetches an AAD token provided Service Principal credentials.
     /// </summary>
-    public class ServicePrincipalTokenProvider : ITokenProvider
+    internal class InternalServicePrincipalTokenProvider
     {
         private readonly IConfidentialClientApplication _client;
 
-        internal ServicePrincipalTokenProvider(string authority, string tenantId, string clientId, string secret, IMsalHttpClientFactory clientFactory)
+        internal InternalServicePrincipalTokenProvider(string authority, string tenantId, string clientId, string secret, IMsalHttpClientFactory clientFactory)
         {
             _client = ConfidentialClientApplicationBuilder.Create(clientId)
                 .WithTenantId(tenantId)
@@ -209,7 +216,7 @@ namespace Microsoft.Identity.Extensions.Msal.Providers
                 .Build();
         }
 
-        private ServicePrincipalTokenProvider(string authority, string tenantId, string clientId, X509Certificate2 cert, IMsalHttpClientFactory clientFactory)
+        private InternalServicePrincipalTokenProvider(string authority, string tenantId, string clientId, X509Certificate2 cert, IMsalHttpClientFactory clientFactory)
         {
             _client = ConfidentialClientApplicationBuilder.Create(clientId)
                 .WithTenantId(tenantId)
@@ -227,7 +234,7 @@ namespace Microsoft.Identity.Extensions.Msal.Providers
         /// <param name="tenantId">A string representation for a GUID, which is the ID of the tenant where the account resides</param>
         /// <param name="clientId">A string representation for a GUID ClientId (application ID) of the application</param>
         /// <param name="cert">A ClientAssertionCertificate which is the certificate secret for the application</param>
-        public ServicePrincipalTokenProvider(string authority, string tenantId, string clientId, X509Certificate2 cert)
+        public InternalServicePrincipalTokenProvider(string authority, string tenantId, string clientId, X509Certificate2 cert)
             : this(authority, tenantId, clientId, cert, null)
         { }
 
@@ -239,7 +246,7 @@ namespace Microsoft.Identity.Extensions.Msal.Providers
         /// <param name="tenantId">A string representation for a GUID, which is the ID of the tenant where the account resides</param>
         /// <param name="clientId">A string representation for a GUID ClientId (application ID) of the application</param>
         /// <param name="secret">A string secret for the application</param>
-        public ServicePrincipalTokenProvider(string authority, string tenantId, string clientId, string secret)
+        public InternalServicePrincipalTokenProvider(string authority, string tenantId, string clientId, string secret)
             : this(authority, tenantId, clientId, secret, null)
         { }
 

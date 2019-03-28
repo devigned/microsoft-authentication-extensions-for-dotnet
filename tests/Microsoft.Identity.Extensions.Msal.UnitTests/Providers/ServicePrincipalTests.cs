@@ -21,15 +21,12 @@ namespace Microsoft.Identity.Extensions.Providers
     [TestClass]
     public class ServicePrincipalTests
     {
-        public static Responder DiscoveryResponder = new Responder
+        private static readonly Responder DiscoveryResponder = new Responder
         {
-            Matcher = (req, state) =>
-            {
-                return req.RequestUri.ToString().StartsWith("https://login.microsoftonline.com/common/discovery/instance");
-            },
+            Matcher = (req, state) => req.RequestUri.ToString().StartsWith("https://login.microsoftonline.com/common/discovery/instance"),
             MockResponse = (req, state) =>
             {
-                var content = @"{
+                const string content = @"{
                         ""tenant_discovery_endpoint"":""https://login.microsoftonline.com/tenant/.well-known/openid-configuration"",
                         ""api-version"":""1.1"",
                         ""metadata"":[
@@ -72,20 +69,17 @@ namespace Microsoft.Identity.Extensions.Providers
             }
         };
 
-        public static Func<string, Responder> TenantDiscoveryResponder = (authority) =>
+        private static readonly Func<string, Responder> TenantDiscoveryResponder = (authority) =>
         {
             return new Responder
             {
-                Matcher = (req, state) =>
-                {
-                    return req.RequestUri.ToString() == authority + "v2.0/.well-known/openid-configuration";
-                },
+                Matcher = (req, state) => req.RequestUri.ToString() == authority + "v2.0/.well-known/openid-configuration",
                 MockResponse = (req, state) =>
                 {
                     var qp = "";
                     var authorityUri = new Uri(authority);
-                    string path = authorityUri.AbsolutePath.Substring(1);
-                    string tenant = path.Substring(0, path.IndexOf("/", StringComparison.Ordinal));
+                    var path = authorityUri.AbsolutePath.Substring(1);
+                    var tenant = path.Substring(0, path.IndexOf("/", StringComparison.Ordinal));
                     if (tenant.ToLowerInvariant().Equals("common", StringComparison.OrdinalIgnoreCase))
                     {
                         tenant = "{tenant}";
@@ -107,16 +101,13 @@ namespace Microsoft.Identity.Extensions.Providers
             };
         };
 
-        public static Responder ClientCredentialTokenResponder = new Responder
+        private static readonly Responder ClientCredentialTokenResponder = new Responder
         {
-            Matcher = (req, state) =>
-            {
-                return req.RequestUri.ToString().EndsWith("oauth2/v2.0/token") && req.Method == HttpMethod.Post;
-            },
+            Matcher = (req, state) => req.RequestUri.ToString().EndsWith("oauth2/v2.0/token") && req.Method == HttpMethod.Post,
             MockResponse = (req, state) =>
             {
-                var token = "superdupertoken";
-                var tokenContent = "{\"token_type\":\"Bearer\",\"expires_in\":\"3599\",\"access_token\":\"" + token + "\"}";
+                const string token = "superdupertoken";
+                const string tokenContent = "{\"token_type\":\"Bearer\",\"expires_in\":\"3599\",\"access_token\":\"" + token + "\"}";
                 return new HttpResponseMessage(HttpStatusCode.OK)
                 {
                     Content = new MockJsonContent(tokenContent)
@@ -133,17 +124,18 @@ namespace Microsoft.Identity.Extensions.Providers
         [TestCategory("ServicePrincipalTests")]
         public async Task ProbeShouldNotBeAvailableWithoutEnvironmentVarsAsync()
         {
-            var probe = new ServicePrincipalProbe(config: new ServicePrincipalConfiguration { });
-            Assert.IsFalse(await probe.AvailableAsync().ConfigureAwait(false));
+            var provider = new ServicePrincipalTokenProvider(config: new ServicePrincipalConfiguration());
+            Assert.IsFalse(await provider.AvailableAsync().ConfigureAwait(false));
         }
 
         [TestMethod]
         [TestCategory("ServicePrincipalTests")]
         public async Task ProbeShouldThrowIfNotAvailablesAsync()
         {
-            var probe = new ServicePrincipalProbe(config: new ServicePrincipalConfiguration { });
-            Assert.IsFalse(await probe.AvailableAsync().ConfigureAwait(false));
-            var ex = await Assert.ThrowsExceptionAsync<InvalidOperationException>(async () => await probe.ProviderAsync().ConfigureAwait(false)).ConfigureAwait(false);
+            var provider = new ServicePrincipalTokenProvider(config: new ServicePrincipalConfiguration());
+            Assert.IsFalse(await provider.AvailableAsync().ConfigureAwait(false));
+            var ex = await Assert.ThrowsExceptionAsync<InvalidOperationException>(async () => await provider.GetTokenAsync(new List<string>{"foo"})
+                .ConfigureAwait(false)).ConfigureAwait(false);
             Assert.AreEqual("The required environment variables are not available.", ex.Message);
         }
 
@@ -151,29 +143,29 @@ namespace Microsoft.Identity.Extensions.Providers
         [TestCategory("ServicePrincipalTests")]
         public async Task ProbeShouldBeAvailableWithServicePrincipalAndSecretAsync()
         {
-            var probe = new ServicePrincipalProbe(config: new ServicePrincipalConfiguration
+            var provider = new ServicePrincipalTokenProvider(config: new ServicePrincipalConfiguration
             {
                 ClientId = "foo",
                 ClientSecret = "bar",
                 TenantId = "Bazz"
             });
-            Assert.IsTrue(await probe.AvailableAsync().ConfigureAwait(false));
-            Assert.IsFalse(probe.IsClientCertificate());
-            Assert.IsTrue(probe.IsClientSecret());
+            Assert.IsTrue(await provider.AvailableAsync().ConfigureAwait(false));
+            Assert.IsFalse(provider.IsClientCertificate());
+            Assert.IsTrue(provider.IsClientSecret());
         }
 
         [TestMethod]
         [TestCategory("ServicePrincipalTests")]
         public async Task ProviderShouldFetchTokenWithServicePrincipalAndSecretAsync()
         {
-            var authority = "https://login.microsoftonline.com/tenantid/";
+            const string authority = "https://login.microsoftonline.com/tenantid/";
             var handler = new MockManagedIdentityHttpMessageHandler();
             handler.Responders.Add(DiscoveryResponder);
             handler.Responders.Add(TenantDiscoveryResponder(authority));
             handler.Responders.Add(ClientCredentialTokenResponder);
             var clientFactory = new ClientFactory(new HttpClient(handler));
-            var clientID = Guid.NewGuid();
-            var provider = new ServicePrincipalTokenProvider(authority, "tenantid", clientID.ToString(), "someSecret", clientFactory);
+            var clientId = Guid.NewGuid();
+            var provider = new InternalServicePrincipalTokenProvider(authority, "tenantid", clientId.ToString(), "someSecret", clientFactory);
             var token = await provider.GetTokenAsync(new List<string> { @"https://management.azure.com//.default" }).ConfigureAwait(false);
             Assert.IsNotNull(token);
         }
@@ -182,15 +174,15 @@ namespace Microsoft.Identity.Extensions.Providers
         [TestCategory("ServicePrincipalTests")]
         public async Task ProbeShouldBeAvailableWithServicePrincipalAndCertificateBase64Async()
         {
-            var probe = new ServicePrincipalProbe(config: new ServicePrincipalConfiguration
+            var provider = new ServicePrincipalTokenProvider(config: new ServicePrincipalConfiguration
             {
                 ClientId = "foo",
                 CertificateBase64 = "bar",
                 TenantId = "Bazz"
             });
-            Assert.IsTrue(await probe.AvailableAsync().ConfigureAwait(false));
-            Assert.IsTrue(probe.IsClientCertificate());
-            Assert.IsFalse(probe.IsClientSecret());
+            Assert.IsTrue(await provider.AvailableAsync().ConfigureAwait(false));
+            Assert.IsTrue(provider.IsClientCertificate());
+            Assert.IsFalse(provider.IsClientSecret());
         }
 
         [TestMethod]
@@ -204,9 +196,9 @@ namespace Microsoft.Identity.Extensions.Providers
                 CertificateStoreName = "My",
                 TenantId = "Bazz"
             };
-            var probe = new ServicePrincipalProbe(config: cfg);
+            var provider = new ServicePrincipalTokenProvider(config: cfg);
             var msg = $"Unable to find certificate with thumbprint '{cfg.CertificateThumbprint}' in certificate store named 'My' and store location CurrentUser";
-            var ex = await Assert.ThrowsExceptionAsync<InvalidOperationException>(async () => await probe.ProviderAsync().ConfigureAwait(false)).ConfigureAwait(false);
+            var ex = await Assert.ThrowsExceptionAsync<InvalidOperationException>(async () => await provider.GetTokenAsync(new List<string>{"foo"}).ConfigureAwait(false)).ConfigureAwait(false);
             Assert.AreEqual(msg, ex.Message);
         }
 
@@ -214,29 +206,29 @@ namespace Microsoft.Identity.Extensions.Providers
         [TestCategory("ServicePrincipalTests")]
         public async Task ProbeShouldBeAvailableWithServicePrincipalAndCertificateThumbAndStoreAsync()
         {
-            var probe = new ServicePrincipalProbe(config: new ServicePrincipalConfiguration
+            var provider = new ServicePrincipalTokenProvider(config: new ServicePrincipalConfiguration
             {
                 ClientId = "foo",
                 CertificateThumbprint = "bar",
                 CertificateStoreName = "My",
                 TenantId = "Bazz"
             });
-            Assert.IsTrue(await probe.AvailableAsync().ConfigureAwait(false));
-            Assert.IsTrue(probe.IsClientCertificate());
-            Assert.IsFalse(probe.IsClientSecret());
+            Assert.IsTrue(await provider.AvailableAsync().ConfigureAwait(false));
+            Assert.IsTrue(provider.IsClientCertificate());
+            Assert.IsFalse(provider.IsClientSecret());
         }
 
         [TestMethod]
         [TestCategory("ServicePrincipalTests")]
         public async Task ProbeShouldNotBeAvailableWithoutTenantIDAsync()
         {
-            var probe = new ServicePrincipalProbe(config: new ServicePrincipalConfiguration
+            var provider = new ServicePrincipalTokenProvider(config: new ServicePrincipalConfiguration
             {
                 ClientId = "foo",
                 CertificateThumbprint = "bar",
                 CertificateStoreName = "My",
             });
-            Assert.IsFalse(await probe.AvailableAsync().ConfigureAwait(false));
+            Assert.IsFalse(await provider.AvailableAsync().ConfigureAwait(false));
         }
     }
 

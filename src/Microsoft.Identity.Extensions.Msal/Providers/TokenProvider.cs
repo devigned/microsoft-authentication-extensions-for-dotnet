@@ -14,6 +14,12 @@ namespace Microsoft.Identity.Extensions.Msal.Providers
     public interface ITokenProvider
     {
         /// <summary>
+        /// Check if the probe is available for use in the current environment
+        /// </summary>
+        /// <returns>True if a credential provider can be built</returns>
+        Task<bool> AvailableAsync();
+        
+        /// <summary>
         /// GetTokenAsync will attempt to fetch a token for a given set of scopes
         /// </summary>
         /// <param name="scopes">Scopes requested to access a protected API</param>

@@ -1,8 +1,8 @@
 // Copyright (c) Microsoft Corporation. All rights reserved.
 // Licensed under the MIT License.
 
+using System.Collections.Generic;
 using System.Threading.Tasks;
-using Microsoft.Identity.Client.Cache;
 
 namespace Microsoft.Identity.Extensions.Msal.Providers
 {
@@ -10,22 +10,16 @@ namespace Microsoft.Identity.Extensions.Msal.Providers
     /// SharedTokenCacheProbe (wip) provides shared access to tokens from the Microsoft family of products.
     /// This probe will provided access to tokens from accounts that have been authenticated in other Microsoft products to provide a single sign-on experience.
     /// </summary>
-    public class SharedTokenCacheProbe : IProbe
+    public class SharedTokenCacheProvider : ITokenProvider
     {
-        /// <summary>
-        ///     Check if the probe is available for use in the current environment
-        /// </summary>
-        /// <returns>True if a credential provider can be built</returns>
+        /// <inheritdoc />
         public Task<bool> AvailableAsync()
         {
             throw new System.NotImplementedException();
         }
 
-        /// <summary>
-        ///     Create a managed identity credential provider from the information discovered by the probe
-        /// </summary>
-        /// <returns>A managed identity credential provider instance</returns>
-        public Task<ITokenProvider> ProviderAsync()
+        /// <inheritdoc />
+        public Task<IToken> GetTokenAsync(IEnumerable<string> scopes)
         {
             throw new System.NotImplementedException();
         }

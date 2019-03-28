@@ -22,16 +22,23 @@ namespace Microsoft.Identity.Extensions.Providers
 
         [TestMethod]
         [TestCategory("ChainedTokenProviderTests")]
-        public async Task SelectTheFirstAvailableProbeTestAsync()
+        public async Task SelectTheFirstAvailableProviderTestAsync()
         {
-            var probes = new List<IProbe>
+            var providers = new List<ITokenProvider>
             {
-                new MockProbe{ Available = false, Provider = new MockProvider() },
-                new MockProbe{ Available = false, Provider = new MockProvider() },
-                new MockProbe{ Available = true, Provider = new MockProvider{ Token = new MockToken{ AccessToken = "foo", ExpiresOn = DateTime.UtcNow.AddSeconds(60)} } },
-                new MockProbe{ Available = true, Provider = new MockProvider{ Token = new MockToken{ AccessToken = "bar", ExpiresOn = DateTime.UtcNow.AddSeconds(60)} } },
+                new MockProvider{ Available = false },
+                new MockProvider{ Available = false },
+                new MockProvider{
+                    Available = true,
+                    Token = new MockToken{ AccessToken = "foo", ExpiresOn = DateTime.UtcNow.AddSeconds(60)}
+                },
+                new MockProvider
+                {
+                    Available = true,
+                    Token = new MockToken{ AccessToken = "bar", ExpiresOn = DateTime.UtcNow.AddSeconds(60)}
+                }
             };
-            var chain = new TokenProviderChain(probes);
+            var chain = new TokenProviderChain(providers);
 
             var token = await chain.GetTokenAsync(new List<string> { "something" }).ConfigureAwait(false);
             Assert.AreEqual("foo", token.AccessToken);
@@ -41,34 +48,27 @@ namespace Microsoft.Identity.Extensions.Providers
         [TestCategory("ChainedTokenProviderTests")]
         public async Task NoAvailableProbesTestAsync()
         {
-            var probes = new List<IProbe>
+            var providers = new List<ITokenProvider>
             {
-                new MockProbe{ Available = false, Provider = new MockProvider() },
+                new MockProvider{ Available = false, Token = new MockToken{} },
             };
-            var chain = new TokenProviderChain(probes);
+            var chain = new TokenProviderChain(providers);
 
-            await Assert.ThrowsExceptionAsync<NoProbesAvailableException>(async () => await chain.GetTokenAsync(new List<string> { "something" }).ConfigureAwait(false)).ConfigureAwait(false);
+            await Assert.ThrowsExceptionAsync<NoProvidersAvailableException>(async () => await chain.GetTokenAsync(new List<string> { "something" })
+                .ConfigureAwait(false)).ConfigureAwait(false);
         }
-    }
-#pragma warning disable CS1998 // Async method lacks 'await' operators and will run synchronously
-    public class MockProbe : IProbe
-    {
-        public ITokenProvider Provider { get; set; }
-
-        public bool Available { get; set; }
-
-
-        public async Task<bool> AvailableAsync() => Available;
-
-
-        public async Task<ITokenProvider> ProviderAsync() => Provider;
     }
 
     public class MockProvider : ITokenProvider
     {
         public IToken Token { get; set; }
 
-        public async Task<IToken> GetTokenAsync(IEnumerable<string> scopes = null) => Token;
+        public bool Available { get; set; }
+
+
+        public Task<bool> AvailableAsync() => Task.FromResult(Available);
+
+        public Task<IToken> GetTokenAsync(IEnumerable<string> scopes = null) => Task.FromResult(Token);
     }
 
     public class MockToken : IToken
@@ -77,5 +77,4 @@ namespace Microsoft.Identity.Extensions.Providers
 
         public string AccessToken { get; set; }
     }
-#pragma warning restore CS1998 // Async method lacks 'await' operators and will run synchronously
 }

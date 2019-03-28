@@ -9,6 +9,7 @@ using Microsoft.Identity.Client;
 
 namespace Microsoft.Identity.Extensions.Msal.Providers
 {
+    /// <inheritdoc />
     /// <summary>
     /// TokenProviderChain creates an ordered list of probes that will determine if the environment will allow it to build
     /// a ICredentialProvider. The ICredentialProvider is then used to generate authentication credentials for the
@@ -16,64 +17,85 @@ namespace Microsoft.Identity.Extensions.Msal.Providers
     /// </summary>
     public class TokenProviderChain : ITokenProvider
     {
-        private readonly IList<IProbe> _probes;
+        private readonly IList<ITokenProvider> _providers;
 
         /// <summary>
         /// Create an instance of a TokenProviderChain providing a list of IProbes which will be executed in order to create a ICredentialProvider
         /// </summary>
-        /// <param name="probes">probes to be executed in order to create a ICredentialProvider</param>
+        /// <param name="providers">providers to be executed in order to create a ICredentialProvider</param>
         /// <exception cref="ArgumentException">throws if no probes were provided or if no probe is able to build a ICredentialProvider</exception>
-        public TokenProviderChain(IList<IProbe> probes)
+        public TokenProviderChain(IList<ITokenProvider> providers)
         {
-            if (probes == null || probes.Count() < 1)
+            if (providers == null || !providers.Any())
             {
                 throw new ArgumentException("must provide 1 or more IProbes");
             }
-            _probes = probes;
+
+            _providers = providers;
         }
 
-        /// <summary>
-        ///     GetTokenAsync returns a token for a given set of scopes
-        /// </summary>
-        /// <param name="scopes">Scopes requested to access a protected API</param>
-        /// <returns>A token with expiration</returns>
+        /// <inheritdoc />
+        public async Task<bool> AvailableAsync()
+        {
+            foreach (var p in _providers)
+            {
+                if (await p.AvailableAsync().ConfigureAwait(false))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        /// <inheritdoc />
         public async Task<IToken> GetTokenAsync(IEnumerable<string> scopes = null)
         {
             ITokenProvider provider = null;
-            foreach (var probe in _probes)
+            foreach (var p in _providers)
             {
-                if (await probe.AvailableAsync().ConfigureAwait(false))
+                if (!await p.AvailableAsync().ConfigureAwait(false))
                 {
-                    provider = await probe.ProviderAsync().ConfigureAwait(false);
-                    break;
+                    continue;
                 }
+
+                provider = p;
+                break;
             }
 
             if (provider == null)
             {
-                throw new NoProbesAvailableException();
+                throw new NoProvidersAvailableException();
             }
 
             return await provider.GetTokenAsync(scopes).ConfigureAwait(false);
         }
     }
 
+    /// <inheritdoc />
     /// <summary>
     /// NoProbesAvailableException is thrown when the chain of providers doesn't contain any token providers able to fetch a token
     /// </summary>
-    public class NoProbesAvailableException : MsalClientException
+    public class NoProvidersAvailableException : MsalClientException
     {
         private const string Code = "no_probes_are_available";
-        private const string ErrorMessage = "All of the IProbes provided were unable to find the variables needed to successfully create a credential provider.";
 
+        private const string ErrorMessage =
+            "All of the IProbes provided were unable to find the variables needed to successfully create a credential provider.";
+
+        /// <inheritdoc />
         /// <summary>
         /// Create a NoProbesAvailableException
         /// </summary>
-        public NoProbesAvailableException() : base(Code, ErrorMessage) { }
+        public NoProvidersAvailableException() : base(Code, ErrorMessage)
+        {
+        }
 
         /// <summary>
         /// Create a NoProbesAvailableException with an error message
         /// </summary>
-        public NoProbesAvailableException(string errorMessage) : base(Code, errorMessage) { }
+        public NoProvidersAvailableException(string errorMessage) : base(Code, errorMessage)
+        {
+        }
     }
 }

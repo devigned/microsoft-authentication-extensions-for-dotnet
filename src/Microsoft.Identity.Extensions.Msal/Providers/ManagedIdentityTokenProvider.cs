@@ -18,9 +18,9 @@ using System.IO;
 namespace Microsoft.Identity.Extensions.Msal.Providers
 {
     /// <summary>
-    ///     ManagedIdentityProbe will look in environment variable to determine if the managed identity provider is
-    ///     available. If the managed identity provider is available, the probe will allow for building a managed identity
-    ///     credential provider to fetch AAD tokens using the IMDS endpoint.
+    ///     ManagedIdentityTokenProvider will look in environment variable to determine if the managed identity provider
+    ///     is available. If the managed identity provider is available, the provider will provide AAD tokens using the
+    ///     IMDS endpoint.
     /// </summary>
     public class ManagedIdentityTokenProvider : ITokenProvider
     {

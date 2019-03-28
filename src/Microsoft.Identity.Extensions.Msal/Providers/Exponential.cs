@@ -109,6 +109,7 @@ namespace Microsoft.Identity.Extensions.Msal.Providers
         }
     }
 
+    /// <inheritdoc />
     /// <summary>
     /// TooManyRetryAttemptsException occurs when a retry strategy exceeds the max number of retries
     /// </summary>
@@ -117,6 +118,7 @@ namespace Microsoft.Identity.Extensions.Msal.Providers
         private const string Code = "max_retries_exhausted";
         private const string ErrorMessage = "max retry attempts exceeded.";
 
+        /// <inheritdoc />
         /// <summary>
         /// Create a TooManyRetryAttemptsException
         /// </summary>
@@ -128,11 +130,11 @@ namespace Microsoft.Identity.Extensions.Msal.Providers
         public TooManyRetryAttemptsException(string errorMessage) : base(Code, errorMessage) { }
     }
 
-    /// <summary>
-    /// TransientManagedIdentityException occurs when a 404, 429 or a 500 series error is encountered.
-    ///
-    /// see: https://docs.microsoft.com/en-us/azure/active-directory/managed-identities-azure-resources/how-to-use-vm-token#error-handling
-    /// </summary>
+    /// <inheritdoc />
+    ///  <summary>
+    ///  TransientManagedIdentityException occurs when a 404, 429 or a 500 series error is encountered.
+    ///  see: https://docs.microsoft.com/en-us/azure/active-directory/managed-identities-azure-resources/how-to-use-vm-token#error-handling
+    ///  </summary>
     public class TransientManagedIdentityException : MsalClientException
     {
         private const string Code = "transient_managed_identity_error";
@@ -143,22 +145,24 @@ namespace Microsoft.Identity.Extensions.Msal.Providers
         /// </summary>
         public TransientManagedIdentityException() : base(Code, ErrorMessage) { }
 
+        /// <inheritdoc />
         /// <summary>
         /// Create a TransientManagedIdentityException with an error message
         /// </summary>
         public TransientManagedIdentityException(string errorMessage) : base(Code, errorMessage) { }
     }
 
-    /// <summary>
-    /// BadManagedIdentityException occurs when a 400 is returned from the managed identity service
-    ///
-    /// see: https://docs.microsoft.com/en-us/azure/active-directory/managed-identities-azure-resources/how-to-use-vm-token#error-handling
-    /// </summary>
-    public class BadRequestManagedIdentityException : Microsoft.Identity.Client.MsalServiceException
+    /// <inheritdoc />
+    ///  <summary>
+    ///  BadManagedIdentityException occurs when a 400 is returned from the managed identity service
+    ///  see: https://docs.microsoft.com/en-us/azure/active-directory/managed-identities-azure-resources/how-to-use-vm-token#error-handling
+    ///  </summary>
+    public class BadRequestManagedIdentityException : MsalServiceException
     {
         private const string Code = "bad_managed_identity_error";
         private const string ErrorMessage = "invalid resource; the application was not found in the tenant.";
 
+        /// <inheritdoc />
         /// <summary>
         /// Create a BadManagedIdentityException
         /// </summary>
