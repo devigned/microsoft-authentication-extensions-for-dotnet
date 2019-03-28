@@ -22,14 +22,14 @@ namespace Microsoft.Identity.Extensions.Msal.Providers
     ///     available. If the managed identity provider is available, the probe will allow for building a managed identity
     ///     credential provider to fetch AAD tokens using the IMDS endpoint.
     /// </summary>
-    public class ManagedIdentityProbe : IProbe
+    public class ManagedIdentityTokenProvider : ITokenProvider
     {
         private readonly HttpClient _httpClient;
         private readonly IManagedIdentityConfiguration _config;
         private readonly string _overrideClientId;
         private readonly bool _checkVMListening;
 
-        internal ManagedIdentityProbe(HttpClient httpClient, IManagedIdentityConfiguration config = null, string overrideClientId = null, bool checkVMListening = true)
+        internal ManagedIdentityTokenProvider(HttpClient httpClient, IManagedIdentityConfiguration config = null, string overrideClientId = null, bool checkVMListening = true)
         {
             _httpClient = httpClient;
             _config = config ?? new DefaultManagedIdentityConfiguration();
@@ -42,9 +42,10 @@ namespace Microsoft.Identity.Extensions.Msal.Providers
         /// </summary>
         /// <param name="config">option configuration structure -- if not supplied, a default environmental configuration is used.</param>
         /// <param name="overrideClientId">override the client identity found in the config for use when querying the Azure IMDS endpoint</param>
-        public ManagedIdentityProbe(IManagedIdentityConfiguration config = null, string overrideClientId = null)
+        public ManagedIdentityTokenProvider(IManagedIdentityConfiguration config = null, string overrideClientId = null)
             : this(null, config, overrideClientId) { }
 
+        /// <inheritdoc />
         /// <summary>
         ///     Check if the probe is available for use in the current environment
         /// </summary>
@@ -68,7 +69,7 @@ namespace Microsoft.Identity.Extensions.Msal.Providers
             try
             {
                 // if service is listening on VM IP check if a token can be acquired
-                var provider = BuildProvider(maxRetries: 2, httpClient: _httpClient);
+                var provider = BuildInternalProvider(maxRetries: 2, httpClient: _httpClient);
                 var token = await provider.GetTokenAsync(new List<string> { @"https://management.azure.com//.default" }).ConfigureAwait(false);
                 return token != null;
             }
@@ -77,6 +78,19 @@ namespace Microsoft.Identity.Extensions.Msal.Providers
                 return false;
             }
         }
+
+        /// <inheritdoc />
+        /// <summary>
+        ///     GetTokenAsync returns a token for a given set of scopes
+        /// </summary>
+        /// <param name="scopes">Scopes requested to access a protected API</param>
+        /// <returns>A token with expiration</returns>
+        public async Task<IToken> GetTokenAsync(IEnumerable<string> scopes = null)
+        {
+            var internalProvider = BuildInternalProvider(httpClient: _httpClient);
+            return await internalProvider.GetTokenAsync(scopes).ConfigureAwait(false);
+        }
+
 
         /// <summary>
         /// IsAppService tells us if we are executing within AppService with Managed Identities enabled
@@ -91,61 +105,32 @@ namespace Microsoft.Identity.Extensions.Msal.Providers
         private static bool IsVMManagedIdentityListening()
         {
             var loopback = IPAddress.Parse(Constants.ManagedIdentityLoopbackAddress);
-            foreach (var tcpEndpoint in IPGlobalProperties.GetIPGlobalProperties().GetActiveTcpListeners())
-            {
-                if (tcpEndpoint.Address == loopback && tcpEndpoint.Port == 80)
-                {
-                    return true;
-                }
-            }
-            return false;
+            return IPGlobalProperties.GetIPGlobalProperties().GetActiveTcpListeners().Any(tcpEndpoint => tcpEndpoint.Address == loopback && tcpEndpoint.Port == 80);
         }
 
-        /// <summary>
-        ///     Create a managed identity credential provider from the information discovered by the probe
-        /// </summary>
-        /// <returns>A managed identity credential provider instance</returns>
-        public async Task<ITokenProvider> ProviderAsync()
+        private InternalManagedIdentityCredentialProvider BuildInternalProvider(int maxRetries = 5, HttpClient httpClient = null)
         {
-            if (!await AvailableAsync().ConfigureAwait(false))
-            {
-                throw new InvalidOperationException("The required environment variables are not available.");
-            }
-
-            return BuildProvider(httpClient: _httpClient);
+            var endpoint = IsAppService() ? _config.ManagedIdentityEndpoint : _config.VMManagedIdentityEndpoint;
+            return new InternalManagedIdentityCredentialProvider(endpoint, httpClient: httpClient, secret: _config.ManagedIdentitySecret, clientId: ClientId, maxRetries: maxRetries);
         }
 
-        private ITokenProvider BuildProvider(int maxRetries = 5, HttpClient httpClient = null)
-        {
-            var endpoint = IsAppService() ? _config.ManagedIdentityEndpoint : Constants.ManagedIdentityTokenEndpoint;
-            return new ManagedIdentityCredentialProvider(endpoint, httpClient: httpClient, secret: _config.ManagedIdentitySecret, clientId: ClientId, maxRetries: maxRetries);
-        }
-
-        private string ClientId
-        {
-            get { return string.IsNullOrWhiteSpace(_overrideClientId) ? _config.ClientId : _overrideClientId; }
-        }
+        private string ClientId => string.IsNullOrWhiteSpace(_overrideClientId) ? _config.ClientId : _overrideClientId;
     }
 
     /// <summary>
     ///     ManagedIdentityCredentialProvider will fetch AAD JWT tokens from the IMDS endpoint for the default client id or
     ///     a specified client id.
     /// </summary>
-    public class ManagedIdentityCredentialProvider : ITokenProvider
+    internal class InternalManagedIdentityCredentialProvider
     {
-        private static readonly HttpClient DefaultClient;
+        private static readonly HttpClient DefaultClient = new HttpClient
+        {
+            Timeout = TimeSpan.FromMilliseconds(100) // 100 milliseconds -- make sure there is an extremely short timeout to ensure we fail fast
+        };
 
         private readonly ManagedIdentityClient _client;
 
-        static ManagedIdentityCredentialProvider()
-        {
-            DefaultClient = new HttpClient
-            {
-                Timeout = TimeSpan.FromMilliseconds(100) // 100 milliseconds -- make sure there is an extremely short timeout to ensure we fail fast
-            };
-        }
-
-        internal ManagedIdentityCredentialProvider(string endpoint, HttpClient httpClient = null, string secret = null, string clientId = null, int maxRetries = 5)
+        internal InternalManagedIdentityCredentialProvider(string endpoint, HttpClient httpClient = null, string secret = null, string clientId = null, int maxRetries = 5)
         {
             if (string.IsNullOrWhiteSpace(secret))
             {
@@ -164,9 +149,10 @@ namespace Microsoft.Identity.Extensions.Msal.Providers
         /// <param name="secret"></param>
         /// <param name="clientId"></param>
         /// <param name="maxRetries"></param>
-        public ManagedIdentityCredentialProvider(string endpoint, string secret = null, string clientId = null, int maxRetries = 5)
+        public InternalManagedIdentityCredentialProvider(string endpoint, string secret = null, string clientId = null, int maxRetries = 5)
             : this(endpoint, httpClient: DefaultClient, secret: secret, clientId: clientId, maxRetries: maxRetries) { }
 
+        /// <inheritdoc />
         /// <summary>
         ///     GetTokenAsync returns a token for a given set of scopes
         /// </summary>
@@ -185,6 +171,7 @@ namespace Microsoft.Identity.Extensions.Msal.Providers
     }
 
 
+    /// <inheritdoc />
     /// <summary>
     /// NoResourceUriInScopesException is thrown when the managed identity token provider does not find a .default
     /// scope for a resource in the enumeration of scopes.
@@ -194,6 +181,7 @@ namespace Microsoft.Identity.Extensions.Msal.Providers
         private const string Code = "no_resource_uri_with_slash_.default_in_scopes";
         private const string ErrorMessage = "The scopes provided is either empty or none that end in `/.default`.";
 
+        /// <inheritdoc />
         /// <summary>
         /// Create a TooManyRetryAttemptsException
         /// </summary>
@@ -207,15 +195,14 @@ namespace Microsoft.Identity.Extensions.Msal.Providers
 
     internal abstract class ManagedIdentityClient
     {
-        protected const string FailedParseOfManagedIdentityExpiration = "failed_parse_of_managed_identity_token_expiry";
+        private const string FailedParseOfManagedIdentityExpiration = "failed_parse_of_managed_identity_token_expiry";
 
-        protected readonly string _endpoint;
-        protected readonly int _maxRetries;
-        protected readonly HttpClient _client;
+        private readonly int _maxRetries;
+        private readonly HttpClient _client;
 
         internal ManagedIdentityClient(string endpoint, HttpClient client, int maxRetries = 5)
         {
-            _endpoint = endpoint;
+            Endpoint = endpoint;
             _client = client;
             _maxRetries = maxRetries;
         }
@@ -256,6 +243,8 @@ namespace Microsoft.Identity.Extensions.Msal.Providers
             }
             return new AccessTokenWithExpiration { ExpiresOn = startOfUnixTime.AddSeconds(seconds), AccessToken = tokenRes.AccessToken };
         }
+
+        protected string Endpoint { get; }
     }
 
     internal class ManagedIdentityVMClient : ManagedIdentityClient
@@ -269,11 +258,11 @@ namespace Microsoft.Identity.Extensions.Msal.Providers
 
         protected override HttpRequestMessage BuildTokenRequest(string resourceUri)
         {
-            string clientIdParameter = string.IsNullOrWhiteSpace(_clientId)
+            var clientIdParameter = string.IsNullOrWhiteSpace(_clientId)
                     ? string.Empty :
                     $"&client_id={_clientId}";
 
-            var requestUri = $"{_endpoint}?resource={resourceUri}{clientIdParameter}&api-version={Constants.ManagedIdentityVMApiVersion}";
+            var requestUri = $"{Endpoint}?resource={resourceUri}{clientIdParameter}&api-version={Constants.ManagedIdentityVMApiVersion}";
             var request = new HttpRequestMessage(HttpMethod.Get, requestUri);
             request.Headers.Add("Metadata", "true");
             return request;
@@ -291,75 +280,10 @@ namespace Microsoft.Identity.Extensions.Msal.Providers
 
         protected override HttpRequestMessage BuildTokenRequest(string resourceUri)
         {
-            var requestUri = $"{_endpoint}?resource={resourceUri}&api-version={Constants.ManagedIdentityAppServiceApiVersion}";
+            var requestUri = $"{Endpoint}?resource={resourceUri}&api-version={Constants.ManagedIdentityAppServiceApiVersion}";
             var request = new HttpRequestMessage(HttpMethod.Get, requestUri);
             request.Headers.Add("Secret", _secret);
             return request;
-        }
-    }
-
-    /// <summary>
-    /// Used to hold the deserialized token response.
-    /// </summary>
-    [DataContract]
-    internal class TokenResponse
-    {
-        private const string TokenResponseFormatExceptionMessage = "Token response is not in the expected format.";
-
-        internal enum DateFormat
-        {
-            Unix,
-            DateTimeString
-        };
-
-        // MSI endpoint return access_token
-        [DataMember(Name = "access_token", IsRequired = false)]
-        public string AccessToken { get; private set; }
-
-        // MSI endpoint return expires_on
-        [DataMember(Name = "expires_on", IsRequired = false)]
-        public string ExpiresOn { get; private set; }
-
-        [DataMember(Name = "error_description", IsRequired = false)]
-        public string ErrorDescription { get; private set; }
-
-        // MSI endpoint return token_type
-        [DataMember(Name = "token_type", IsRequired = false)]
-        public string TokenType { get; private set; }
-
-        /// <summary>
-        /// Parse token response returned from OAuth provider.
-        /// While more fields are returned, we only need the access token.
-        /// </summary>
-        /// <param name="tokenResponse">This is the response received from OAuth endpoint that has the access token in it.</param>
-        /// <returns></returns>
-        public static TokenResponse Parse(string tokenResponse)
-        {
-            try
-            {
-                return DeserializeFromJson<TokenResponse>(Encoding.UTF8.GetBytes(tokenResponse));
-            }
-            catch (Exception exp)
-            {
-                throw new FormatException($"{TokenResponseFormatExceptionMessage} Exception Message: {exp.Message}");
-            }
-        }
-
-        private static T DeserializeFromJson<T>(byte[] jsonByteArray)
-        {
-            if (jsonByteArray == null || jsonByteArray.Length == 0)
-            {
-                return default;
-            }
-
-            T response;
-            DataContractJsonSerializer serializer = new DataContractJsonSerializer(typeof (T));
-            using (MemoryStream stream = new MemoryStream(jsonByteArray))
-            {
-                response = (T) serializer.ReadObject(stream);
-            }
-
-            return response;
         }
     }
 

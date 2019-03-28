@@ -1,13 +1,14 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFrameworks>netcoreapp2.0;net46</TargetFrameworks>
+    <TargetFrameworks>netcoreapp2.0</TargetFrameworks>
   </PropertyGroup>
 
   <Import Project="..\Shared\Shared.projitems" Label="Shared" />
 
   <ItemGroup>
     <PackageReference Include="Microsoft.Identity.Client" Version="3.0.0-preview" />
+    <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="4.5.0" />
     <Reference Include="System.Security" />
   </ItemGroup>
 

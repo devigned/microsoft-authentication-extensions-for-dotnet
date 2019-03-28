@@ -120,14 +120,9 @@ namespace Microsoft.Identity.Extensions.Adal
                 if (fileData != null && fileData.Length > 0)
                 {
                     _logger.TraceEvent(TraceEventType.Information, /*id*/ 0, $"Unprotecting the data");
-#if NET46
-                    if (SharedUtilities.IsWindowsPlatform())
-                    {
-                        data = ProtectedData.Unprotect(fileData, optionalEntropy: null, scope: DataProtectionScope.CurrentUser);
-                    }
-#else
-                    data = fileData;
-#endif
+                    data = SharedUtilities.IsWindowsPlatform() ?
+                        ProtectedData.Unprotect(fileData, optionalEntropy: null, scope: DataProtectionScope.CurrentUser) :
+                        fileData;
                 }
                 else if (fileData == null || fileData.Length == 0)
                 {
@@ -169,14 +164,11 @@ namespace Microsoft.Identity.Extensions.Adal
             try
             {
                 _logger.TraceEvent(TraceEventType.Information, /*id*/ 0, FormattableString.Invariant($"Got '{data?.Length}' bytes to write to storage"));
-#if NET46
                 if (SharedUtilities.IsWindowsPlatform() && data.Length != 0)
                 {
                     _logger.TraceEvent(TraceEventType.Information, /*id*/ 0, $"Protecting the data");
                     data = ProtectedData.Protect(data, optionalEntropy: null, scope: DataProtectionScope.CurrentUser);
                 }
-#endif
-
                 WriteDataCore(data);
             }
             catch (Exception e)

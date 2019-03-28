@@ -3,18 +3,16 @@
 
 using Microsoft.Identity.Client;
 using Microsoft.Identity.Client.AppConfig;
-using Microsoft.Identity.Client.Http;
-using Microsoft.Identity.Client.Instance;
 using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
 using System.Security.Cryptography.X509Certificates;
-using System.Threading;
 using System.Threading.Tasks;
 
 namespace Microsoft.Identity.Extensions.Msal.Providers
 {
+    /// <inheritdoc />
     /// <summary>
     ///     ServicePrincipalProbe looks to the application setting and environment variables to build a ICredentialProvider.
     /// </summary>
@@ -32,16 +30,10 @@ namespace Microsoft.Identity.Extensions.Msal.Providers
         }
 
         // Async method lacks 'await' operators and will run synchronously
-        /// <summary>
-        /// Check if the probe is available for use in the current environment
-        /// </summary>
-        /// <returns>True if a credential provider can be built</returns>
+        /// <inheritdoc />
         public Task<bool> AvailableAsync() => Task.FromResult(IsClientSecret() || IsClientCertificate());
 
-        /// <summary>
-        /// Create a credential provider from the information discovered by the probe
-        /// </summary>
-        /// <returns>A service principal credential provider</returns>
+        /// <inheritdoc />
         public async Task<ITokenProvider> ProviderAsync()
         {
             var available = await AvailableAsync().ConfigureAwait(false);
@@ -50,7 +42,7 @@ namespace Microsoft.Identity.Extensions.Msal.Providers
                 throw new InvalidOperationException("The required environment variables are not available.");
             }
 
-            var authorityWithTenant = string.Format(CultureInfo.InvariantCulture, AadAuthority.AADCanonicalAuthorityTemplate, _config.Authority, _config.TenantId);
+            var authorityWithTenant = string.Format(CultureInfo.InvariantCulture, AadAuthority.AadCanonicalAuthorityTemplate, _config.Authority, _config.TenantId);
 
             if (!IsClientCertificate())
             {
@@ -69,15 +61,9 @@ namespace Microsoft.Identity.Extensions.Msal.Providers
                 // Try to use the certificate store
                 var store = new X509Store(StoreNameWithDefault, StoreLocationFromEnv);
                 store.Open(OpenFlags.ReadOnly);
-                X509Certificate2Collection certs;
-                if (!string.IsNullOrEmpty(_config.CertificateSubjectDistinguishedName))
-                {
-                    certs = store.Certificates.Find(X509FindType.FindBySubjectDistinguishedName, _config.CertificateSubjectDistinguishedName, true);
-                }
-                else
-                {
-                    certs = store.Certificates.Find(X509FindType.FindByThumbprint, _config.CertificateThumbprint, true);
-                }
+                var certs = !string.IsNullOrEmpty(_config.CertificateSubjectDistinguishedName) ?
+                    store.Certificates.Find(X509FindType.FindBySubjectDistinguishedName, _config.CertificateSubjectDistinguishedName, true) :
+                    store.Certificates.Find(X509FindType.FindByThumbprint, _config.CertificateThumbprint, true);
 
                 if (certs.Count < 1)
                 {
@@ -91,7 +77,7 @@ namespace Microsoft.Identity.Extensions.Msal.Providers
             return new ServicePrincipalTokenProvider(authorityWithTenant, _config.TenantId, _config.ClientId, cert);
         }
 
-        internal StoreLocation StoreLocationFromEnv
+        private StoreLocation StoreLocationFromEnv
         {
             get
             {
@@ -105,7 +91,7 @@ namespace Microsoft.Identity.Extensions.Msal.Providers
             }
         }
 
-        internal string StoreNameWithDefault
+        private string StoreNameWithDefault
         {
             get
             {
@@ -123,7 +109,6 @@ namespace Microsoft.Identity.Extensions.Msal.Providers
         internal bool IsClientCertificate()
         {
             var tenantAndClient = new List<string> { _config.TenantId, _config.ClientId };
-            var env = Environment.GetEnvironmentVariables();
             if (tenantAndClient.All(item => !string.IsNullOrWhiteSpace(item)))
             {
                 return !string.IsNullOrWhiteSpace(_config.CertificateBase64) ||
@@ -206,6 +191,7 @@ namespace Microsoft.Identity.Extensions.Msal.Providers
         public string Authority => string.IsNullOrWhiteSpace(Env.AadAuthority) ? AadAuthority.DefaultTrustedHost : Env.AadAuthority;
     }
 
+    /// <inheritdoc />
     /// <summary>
     /// ServicePrincipalTokenProvider fetches an AAD token provided Service Principal credentials.
     /// </summary>
@@ -217,16 +203,17 @@ namespace Microsoft.Identity.Extensions.Msal.Providers
         {
             _client = ConfidentialClientApplicationBuilder.Create(clientId)
                 .WithTenantId(tenantId)
-                .WithAuthority(new Uri(authority), true)
+                .WithAuthority(new Uri(authority))
                 .WithClientSecret(secret)
                 .WithHttpClientFactory(clientFactory)
                 .Build();
         }
-        internal ServicePrincipalTokenProvider(string authority, string tenantId, string clientId, X509Certificate2 cert, IMsalHttpClientFactory clientFactory)
+
+        private ServicePrincipalTokenProvider(string authority, string tenantId, string clientId, X509Certificate2 cert, IMsalHttpClientFactory clientFactory)
         {
             _client = ConfidentialClientApplicationBuilder.Create(clientId)
                 .WithTenantId(tenantId)
-                .WithAuthority(new Uri(authority), true)
+                .WithAuthority(new Uri(authority))
                 .WithCertificate(cert)
                 .WithHttpClientFactory(clientFactory)
                 .Build();
@@ -240,7 +227,7 @@ namespace Microsoft.Identity.Extensions.Msal.Providers
         /// <param name="tenantId">A string representation for a GUID, which is the ID of the tenant where the account resides</param>
         /// <param name="clientId">A string representation for a GUID ClientId (application ID) of the application</param>
         /// <param name="cert">A ClientAssertionCertificate which is the certificate secret for the application</param>
-        public ServicePrincipalTokenProvider(string authority, string tenantId, string clientId, X509Certificate2 cert) 
+        public ServicePrincipalTokenProvider(string authority, string tenantId, string clientId, X509Certificate2 cert)
             : this(authority, tenantId, clientId, cert, null)
         { }
 
@@ -268,9 +255,9 @@ namespace Microsoft.Identity.Extensions.Msal.Providers
         }
     }
 
-    internal class AadAuthority
+    internal static class AadAuthority
     {
         public const string DefaultTrustedHost = "login.microsoftonline.com";
-        public const string AADCanonicalAuthorityTemplate = "https://{0}/{1}/";
+        public const string AadCanonicalAuthorityTemplate = "https://{0}/{1}/";
     }
 }
