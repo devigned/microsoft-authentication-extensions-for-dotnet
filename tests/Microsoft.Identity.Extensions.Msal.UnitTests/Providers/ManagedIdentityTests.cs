@@ -15,6 +15,8 @@ using System.Net.Sockets;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Configuration.Memory;
 
 namespace Microsoft.Identity.Extensions.Providers
 {
@@ -34,21 +36,26 @@ namespace Microsoft.Identity.Extensions.Providers
           ""token_type"": ""Bearer""
         }";
 
-        private readonly ManagedIdentityConfiguration _defaultConfig = new ManagedIdentityConfiguration
-        {
-            VMManagedIdentityEndpoint = Msal.Providers.Constants.ManagedIdentityTokenEndpoint
-        };
-
         [TestInitialize]
         public void TestInitialize()
         {
+        }
+
+        private IConfigurationProvider FakeConfiguration(IEnumerable<KeyValuePair<string,string>> initialData = null)
+        {
+            initialData = initialData ?? new List<KeyValuePair<string, string>>();
+            var source = new MemoryConfigurationSource
+            {
+                InitialData = initialData
+            };
+            return new MemoryConfigurationProvider(source);
         }
 
         [TestMethod]
         [TestCategory("ManagedIdentityTests")]
         public async Task ProbeShouldNotBeAvailableWithoutManagedIdentityServiceAsync()
         {
-            var probe = new ManagedIdentityTokenProvider(config: new ManagedIdentityConfiguration { });
+            var probe = new ManagedIdentityTokenProvider(config: FakeConfiguration());
             var st = DateTime.Now;
             Assert.IsFalse(await probe.AvailableAsync().ConfigureAwait(false));
             Assert.IsTrue((DateTime.Now - st) < TimeSpan.FromMilliseconds(800), "should take less than 800 milliseconds");
@@ -58,11 +65,14 @@ namespace Microsoft.Identity.Extensions.Providers
         [TestCategory("ManagedIdentityTests")]
         public async Task ProbeShouldBeAvailableWithAppServiceConfigManagedIdentityServiceAsync()
         {
-            var probe = new ManagedIdentityTokenProvider(config: new ManagedIdentityConfiguration
+            var config = FakeConfiguration(new List<KeyValuePair<string, string>>
             {
-                ManagedIdentityEndpoint = "http://127.0.0.1/foo",
-                ManagedIdentitySecret = "secret",
+                new KeyValuePair<string, string>(Msal.Providers.Constants.ManagedIdentityEndpointEnvName,
+                    "http://127.0.0.1/foo"),
+                new KeyValuePair<string, string>(Msal.Providers.Constants.ManagedIdentitySecretEnvName, "secret")
+
             });
+            var probe = new ManagedIdentityTokenProvider(config: config);
             Assert.IsTrue(await probe.AvailableAsync().ConfigureAwait(false));
         }
 
@@ -89,11 +99,14 @@ namespace Microsoft.Identity.Extensions.Providers
                 }
             });
             var client = new HttpClient(handler);
-            var provider = new ManagedIdentityTokenProvider(httpClient: client, config: new ManagedIdentityConfiguration
+            var config = FakeConfiguration(new List<KeyValuePair<string, string>>
             {
-                ManagedIdentityEndpoint = "http://127.0.0.1/foo",
-                ManagedIdentitySecret = "secret",
-            }, checkVMListening: false);
+                new KeyValuePair<string, string>(Msal.Providers.Constants.ManagedIdentityEndpointEnvName,
+                    "http://127.0.0.1/foo"),
+                new KeyValuePair<string, string>(Msal.Providers.Constants.ManagedIdentitySecretEnvName, "secret")
+
+            });
+            var provider = new ManagedIdentityTokenProvider(httpClient: client, config: config, checkVMListening: false);
             var token = await provider.GetTokenAsync(new List<string> { "https://management.azure.com//.default" }).ConfigureAwait(false);
             Assert.IsNotNull(token);
             var seconds = double.Parse(ExpiresOn, CultureInfo.InvariantCulture);
@@ -125,11 +138,12 @@ namespace Microsoft.Identity.Extensions.Providers
                 }
             });
             var client = new HttpClient(handler);
-            var provider = new ManagedIdentityTokenProvider(httpClient: client, config: new ManagedIdentityConfiguration
+            var config = FakeConfiguration(new List<KeyValuePair<string, string>>
             {
-                ClientId = "foo",
-                VMManagedIdentityEndpoint = Msal.Providers.Constants.ManagedIdentityTokenEndpoint
-            }, checkVMListening: false);
+                new KeyValuePair<string, string>(Msal.Providers.Constants.AzureClientIdEnvName, "foo"),
+
+            });
+            var provider = new ManagedIdentityTokenProvider(httpClient: client, config: config, checkVMListening: false);
             var token = await provider.GetTokenAsync(new List<string> { "https://management.azure.com//.default" }).ConfigureAwait(false);
             Assert.IsNotNull(token);
             var seconds = double.Parse(ExpiresOn, CultureInfo.InvariantCulture);
@@ -161,7 +175,7 @@ namespace Microsoft.Identity.Extensions.Providers
                 }
             });
             var client = new HttpClient(handler);
-            var provider = new ManagedIdentityTokenProvider(httpClient: client, config: _defaultConfig, checkVMListening: false);
+            var provider = new ManagedIdentityTokenProvider(httpClient: client, config: FakeConfiguration(), checkVMListening: false);
             Assert.IsTrue(await provider.AvailableAsync().ConfigureAwait(false));
         }
 
@@ -181,7 +195,7 @@ namespace Microsoft.Identity.Extensions.Providers
                 MockResponse = (req, state) => new HttpResponseMessage(HttpStatusCode.BadRequest)
             });
             var client = new HttpClient(handler);
-            var provider = new ManagedIdentityTokenProvider(httpClient: client, config: _defaultConfig, checkVMListening: false);
+            var provider = new ManagedIdentityTokenProvider(httpClient: client, config: FakeConfiguration(), checkVMListening: false);
             await Assert.ThrowsExceptionAsync<BadRequestManagedIdentityException>(async () => await provider.AvailableAsync()
                 .ConfigureAwait(false)).ConfigureAwait(false);
         }
@@ -215,7 +229,7 @@ namespace Microsoft.Identity.Extensions.Providers
                 }
             });
             var client = new HttpClient(handler);
-            var provider = new ManagedIdentityTokenProvider(httpClient: client, config: _defaultConfig, checkVMListening: false);
+            var provider = new ManagedIdentityTokenProvider(httpClient: client, config: FakeConfiguration(), checkVMListening: false);
             Assert.IsTrue(await provider.AvailableAsync().ConfigureAwait(false));
         }
 
@@ -250,7 +264,7 @@ namespace Microsoft.Identity.Extensions.Providers
                 }
             });
             var client = new HttpClient(handler);
-            var provider = new ManagedIdentityTokenProvider(httpClient: client, config: _defaultConfig, checkVMListening: false);
+            var provider = new ManagedIdentityTokenProvider(httpClient: client, config: FakeConfiguration(), checkVMListening: false);
             Assert.IsTrue(await provider.AvailableAsync().ConfigureAwait(false));
         }
 
@@ -290,32 +304,9 @@ namespace Microsoft.Identity.Extensions.Providers
                 }
             });
             var client = new HttpClient(handler);
-            var provider = new ManagedIdentityTokenProvider(httpClient: client, config: _defaultConfig, checkVMListening: false);
+            var provider = new ManagedIdentityTokenProvider(httpClient: client, config: FakeConfiguration(), checkVMListening: false);
             Assert.IsTrue(await provider.AvailableAsync().ConfigureAwait(false));
         }
-    }
-
-    public class ManagedIdentityConfiguration : IManagedIdentityConfiguration
-    {
-        /// <summary>
-        /// ManagedIdentitySecret is the secret for use in Azure AppService
-        /// </summary>
-        public string ManagedIdentitySecret { get; set; }
-
-        /// <summary>
-        /// ManagedIdentityEndpoint is the AppService endpoint
-        /// </summary>
-        public string ManagedIdentityEndpoint { get; set; }
-
-        /// <summary>
-        /// VMManagedIdentityEndpoint is the VM's default managed identity endpoint
-        /// </summary>
-        public string VMManagedIdentityEndpoint { get; set; }
-
-        /// <summary>
-        /// ClientId is the user assigned managed identity for use in VM managed identity
-        /// </summary>
-        public string ClientId { get; set; }
     }
 
     public class MockManagedIdentityHttpMessageHandler : HttpMessageHandler

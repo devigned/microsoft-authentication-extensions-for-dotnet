@@ -28,6 +28,12 @@ namespace Microsoft.Identity.Extensions.Msal.Providers
         /// </summary>
         public static readonly string AzureClientSecretEnvName = "AZURE_CLIENT_SECRET";
 
+        /// <summary>
+        ///     AzurePreferredAccountUsernameEnvName is the username of an account in the Shared Token Cache. If there
+        ///     have been multiple accounts logged in via MSFT develper tools, this will filter the accounts to use a
+        ///     specific username rather than selecting the first.
+        /// </summary>
+        public static readonly string AzurePreferredAccountUsernameEnvName = "AZURE_PREFERRED_ACCOUNT_USERNAME";
 
         /// <summary>
         ///     AzureCertificateEnvName is the name of the environment variable which holds a base64 encoded string
@@ -57,7 +63,7 @@ namespace Microsoft.Identity.Extensions.Msal.Providers
         ///     AzureCertificateStoreLocationEnvName is the name of the environment variable which holds the location of the
         ///     certificate store (CurrentUser or LocalMachine)
         /// </summary>
-        public static readonly string AzureCertificateStoreLocation = "AZURE_CERTIFICATE_STORE_LOCATION";
+        public static readonly string AzureCertificateStoreLocationEnvName = "AZURE_CERTIFICATE_STORE_LOCATION";
 
         /// <summary>
         /// API Version used for the Managed Identity metadata endpoint on AppService
@@ -149,7 +155,7 @@ namespace Microsoft.Identity.Extensions.Msal.Providers
         ///     The location of the certificate store (CurrentUser or LocalMachine) environment variable
         /// </summary>
         public static string CertificateStoreLocation =>
-            Environment.GetEnvironmentVariable(Constants.AzureCertificateStoreLocation);
+            Environment.GetEnvironmentVariable(Constants.AzureCertificateStoreLocationEnvName);
 
         /// <summary>
         /// ManagedIdentityEndpoint is the value of the managed identity endpoint environment variable

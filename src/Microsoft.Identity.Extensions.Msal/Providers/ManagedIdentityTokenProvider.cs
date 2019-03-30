@@ -14,6 +14,8 @@ using System.Text;
 using Microsoft.Identity.Client;
 using System.Runtime.Serialization.Json;
 using System.IO;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Configuration.EnvironmentVariables;
 
 namespace Microsoft.Identity.Extensions.Msal.Providers
 {
@@ -29,10 +31,11 @@ namespace Microsoft.Identity.Extensions.Msal.Providers
         private readonly string _overrideClientId;
         private readonly bool _checkVMListening;
 
-        internal ManagedIdentityTokenProvider(HttpClient httpClient, IManagedIdentityConfiguration config = null, string overrideClientId = null, bool checkVMListening = true)
+        internal ManagedIdentityTokenProvider(HttpClient httpClient, IConfigurationProvider config = null, string overrideClientId = null, bool checkVMListening = true)
         {
             _httpClient = httpClient;
-            _config = config ?? new DefaultManagedIdentityConfiguration();
+            config = config ?? new EnvironmentVariablesConfigurationProvider();
+            _config = new DefaultManagedIdentityConfiguration(config);
             _overrideClientId = overrideClientId;
             _checkVMListening = checkVMListening;
         }
@@ -42,7 +45,7 @@ namespace Microsoft.Identity.Extensions.Msal.Providers
         /// </summary>
         /// <param name="config">option configuration structure -- if not supplied, a default environmental configuration is used.</param>
         /// <param name="overrideClientId">override the client identity found in the config for use when querying the Azure IMDS endpoint</param>
-        public ManagedIdentityTokenProvider(IManagedIdentityConfiguration config = null, string overrideClientId = null)
+        public ManagedIdentityTokenProvider(IConfigurationProvider config = null, string overrideClientId = null)
             : this(null, config, overrideClientId) { }
 
         /// <inheritdoc />
@@ -110,7 +113,7 @@ namespace Microsoft.Identity.Extensions.Msal.Providers
 
         private InternalManagedIdentityCredentialProvider BuildInternalProvider(int maxRetries = 5, HttpClient httpClient = null)
         {
-            var endpoint = IsAppService() ? _config.ManagedIdentityEndpoint : _config.VMManagedIdentityEndpoint;
+            var endpoint = IsAppService() ? _config.ManagedIdentityEndpoint : Constants.ManagedIdentityTokenEndpoint;
             return new InternalManagedIdentityCredentialProvider(endpoint, httpClient: httpClient, secret: _config.ManagedIdentitySecret, clientId: ClientId, maxRetries: maxRetries);
         }
 
@@ -290,7 +293,7 @@ namespace Microsoft.Identity.Extensions.Msal.Providers
     /// <summary>
     /// IManagedIdentityConfiguration provides the configurable properties for the ManagedIdentityProbe
     /// </summary>
-    public interface IManagedIdentityConfiguration
+    internal interface IManagedIdentityConfiguration
     {
         /// <summary>
         /// ManagedIdentitySecret is the secret for use in Azure AppService
@@ -303,11 +306,6 @@ namespace Microsoft.Identity.Extensions.Msal.Providers
         string ManagedIdentityEndpoint { get; }
 
         /// <summary>
-        /// VMManagedIdentityEndpoint is the VM's default managed identity endpoint
-        /// </summary>
-        string VMManagedIdentityEndpoint { get; }
-
-        /// <summary>
         /// ClientId is the user assigned managed identity for use in VM managed identity
         /// </summary>
         string ClientId { get; }
@@ -315,12 +313,17 @@ namespace Microsoft.Identity.Extensions.Msal.Providers
 
     internal class DefaultManagedIdentityConfiguration : IManagedIdentityConfiguration
     {
-        public string ManagedIdentitySecret => Env.ManagedIdentitySecret;
+        private readonly IConfigurationProvider _config;
 
-        public string ManagedIdentityEndpoint => Env.ManagedIdentityEndpoint;
+        public DefaultManagedIdentityConfiguration(IConfigurationProvider config)
+        {
+            _config = config;
+        }
 
-        public string ClientId => Env.ClientId;
+        public string ManagedIdentitySecret => _config.Get(Constants.ManagedIdentitySecretEnvName);
 
-        public string VMManagedIdentityEndpoint => Constants.ManagedIdentityTokenEndpoint;
+        public string ManagedIdentityEndpoint => _config.Get(Constants.ManagedIdentityEndpointEnvName);
+
+        public string ClientId => _config.Get(Constants.AzureClientIdEnvName);
     }
 }

@@ -8,6 +8,8 @@ using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Configuration.EnvironmentVariables;
 using Microsoft.Identity.Client;
 using Microsoft.Identity.Client.AppConfig;
 
@@ -23,10 +25,12 @@ namespace Microsoft.Identity.Extensions.Msal.Providers
             Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "msal.cache");
         private readonly IPublicClientApplication _app;
         private readonly MsalCacheHelper _cacheHelper;
+        private readonly IConfigurationProvider _config;
 
         /// <inheritdoc />
-        public SharedTokenCacheProvider()
+        public SharedTokenCacheProvider(IConfigurationProvider config = null)
         {
+            _config = config ?? new EnvironmentVariablesConfigurationProvider();
             var authority = string.Format(CultureInfo.InvariantCulture,
                 AadAuthority.AadCanonicalAuthorityTemplate,
                 AadAuthority.DefaultTrustedHost,
@@ -50,20 +54,29 @@ namespace Microsoft.Identity.Extensions.Msal.Providers
         /// <inheritdoc />
         public async Task<bool> AvailableAsync()
         {
-            var accounts = await _app.GetAccountsAsync().ConfigureAwait(false);
+            var accounts = await GetAccountsAsync().ConfigureAwait(false);
             return accounts.Any();
         }
 
         /// <inheritdoc />
         public async Task<IToken> GetTokenAsync(IEnumerable<string> scopes)
         {
-            var accounts = (await _app.GetAccountsAsync().ConfigureAwait(false)).ToList();
+            var accounts = (await GetAccountsAsync().ConfigureAwait(false)).ToList();
             if(!accounts.Any())
             {
                 throw new InvalidOperationException("there are no accounts available to acquire a token");
             }
             var res = await _app.AcquireTokenSilentAsync(scopes, accounts.First()).ConfigureAwait(false);
             return new AccessTokenWithExpiration { ExpiresOn = res.ExpiresOn, AccessToken = res.AccessToken };
+        }
+
+        private async Task<IEnumerable<IAccount>> GetAccountsAsync()
+        {
+            var accounts = (await _app.GetAccountsAsync().ConfigureAwait(false)).ToList();
+            var clientId = _config.Get(Constants.AzureClientIdEnvName);
+            return !string.IsNullOrWhiteSpace(clientId) ?
+                accounts.Where(i => i.Username == _config.Get(Constants.AzurePreferredAccountUsernameEnvName)) :
+                accounts;
         }
     }
 }

@@ -9,6 +9,8 @@ using System.Globalization;
 using System.Linq;
 using System.Security.Cryptography.X509Certificates;
 using System.Threading.Tasks;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Configuration.EnvironmentVariables;
 
 namespace Microsoft.Identity.Extensions.Msal.Providers
 {
@@ -24,9 +26,10 @@ namespace Microsoft.Identity.Extensions.Msal.Providers
         /// Create a new instance of a ServicePrincipalProbe
         /// </summary>
         /// <param name="config">optional configuration; if not specified the default configuration will use environment variables</param>
-        public ServicePrincipalTokenProvider(IServicePrincipalConfiguration config = null)
+        public ServicePrincipalTokenProvider(IConfigurationProvider config = null)
         {
-            _config = config ?? new DefaultServicePrincipalConfiguration();
+            config = config ?? new EnvironmentVariablesConfigurationProvider();
+            _config = new DefaultServicePrincipalConfiguration(config);
         }
 
         // Async method lacks 'await' operators and will run synchronously
@@ -129,7 +132,7 @@ namespace Microsoft.Identity.Extensions.Msal.Providers
     /// <summary>
     /// IManagedIdentityConfiguration provides the configurable properties for the ManagedIdentityProbe
     /// </summary>
-    public interface IServicePrincipalConfiguration
+    internal interface IServicePrincipalConfiguration
     {
         /// <summary>
         /// CertificateBase64 is the base64 encoded representation of an x509 certificate
@@ -179,26 +182,32 @@ namespace Microsoft.Identity.Extensions.Msal.Providers
 
     internal class DefaultServicePrincipalConfiguration : IServicePrincipalConfiguration
     {
-        public string ClientId => Env.ClientId;
+        private readonly IConfigurationProvider _config;
 
-        public string CertificateBase64 => Env.CertificateBase64;
+        public DefaultServicePrincipalConfiguration(IConfigurationProvider config)
+        {
+            _config = config;
+        }
 
-        public string CertificateThumbprint => Env.CertificateThumbprint;
+        public string ClientId => _config.Get(Constants.AzureClientIdEnvName);
 
-        public string CertificateStoreName => Env.CertificateStoreName;
+        public string CertificateBase64 => _config.Get(Constants.AzureCertificateEnvName);
 
-        public string TenantId => Env.TenantId;
+        public string CertificateThumbprint => _config.Get(Constants.AzureCertificateThumbprintEnvName);
 
-        public string ClientSecret => Env.ClientSecret;
+        public string CertificateStoreName => _config.Get(Constants.AzureCertificateStoreEnvName);
 
-        public string CertificateStoreLocation => Env.CertificateStoreLocation;
+        public string TenantId => _config.Get(Constants.AzureTenantIdEnvName);
 
-        public string CertificateSubjectDistinguishedName => Env.CertificateSubjectDistinguishedName;
+        public string ClientSecret => _config.Get(Constants.AzureClientSecretEnvName);
 
-        public string Authority => string.IsNullOrWhiteSpace(Env.AadAuthority) ? AadAuthority.DefaultTrustedHost : Env.AadAuthority;
+        public string CertificateStoreLocation => _config.Get(Constants.AzureCertificateStoreLocationEnvName);
+
+        public string CertificateSubjectDistinguishedName => _config.Get(Constants.AzureCertificateSubjectDistinguishedNameEnvName);
+
+        public string Authority => string.IsNullOrWhiteSpace(_config.Get(Constants.AadAuthorityEnvName)) ? AadAuthority.DefaultTrustedHost : _config.Get(Constants.AadAuthorityEnvName);
     }
 
-    /// <inheritdoc />
     /// <summary>
     /// ServicePrincipalTokenProvider fetches an AAD token provided Service Principal credentials.
     /// </summary>

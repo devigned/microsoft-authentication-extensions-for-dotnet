@@ -15,6 +15,8 @@ using System.Linq;
 using System.Net;
 using System.Net.Http;
 using System.Threading.Tasks;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Configuration.Memory;
 
 namespace Microsoft.Identity.Extensions.Providers
 {
@@ -23,7 +25,7 @@ namespace Microsoft.Identity.Extensions.Providers
     {
         private static readonly Responder DiscoveryResponder = new Responder
         {
-            Matcher = (req, state) => req.RequestUri.ToString().StartsWith("https://login.microsoftonline.com/common/discovery/instance"),
+            Matcher = (req, state) => req.RequestUri.ToString().StartsWith("https://login.microsoftonline.com/common/discovery/instance", StringComparison.InvariantCulture),
             MockResponse = (req, state) =>
             {
                 const string content = @"{
@@ -115,6 +117,16 @@ namespace Microsoft.Identity.Extensions.Providers
             }
         };
 
+        private IConfigurationProvider FakeConfiguration(IEnumerable<KeyValuePair<string,string>> initialData = null)
+        {
+            initialData = initialData ?? new List<KeyValuePair<string, string>>();
+            var source = new MemoryConfigurationSource
+            {
+                InitialData = initialData
+            };
+            return new MemoryConfigurationProvider(source);
+        }
+
         [TestInitialize]
         public void TestInitialize()
         {
@@ -124,7 +136,8 @@ namespace Microsoft.Identity.Extensions.Providers
         [TestCategory("ServicePrincipalTests")]
         public async Task ProbeShouldNotBeAvailableWithoutEnvironmentVarsAsync()
         {
-            var provider = new ServicePrincipalTokenProvider(config: new ServicePrincipalConfiguration());
+
+            var provider = new ServicePrincipalTokenProvider(config: FakeConfiguration());
             Assert.IsFalse(await provider.AvailableAsync().ConfigureAwait(false));
         }
 
@@ -132,7 +145,7 @@ namespace Microsoft.Identity.Extensions.Providers
         [TestCategory("ServicePrincipalTests")]
         public async Task ProbeShouldThrowIfNotAvailablesAsync()
         {
-            var provider = new ServicePrincipalTokenProvider(config: new ServicePrincipalConfiguration());
+            var provider = new ServicePrincipalTokenProvider(config: FakeConfiguration());
             Assert.IsFalse(await provider.AvailableAsync().ConfigureAwait(false));
             var ex = await Assert.ThrowsExceptionAsync<InvalidOperationException>(async () => await provider.GetTokenAsync(new List<string>{"foo"})
                 .ConfigureAwait(false)).ConfigureAwait(false);
@@ -143,12 +156,13 @@ namespace Microsoft.Identity.Extensions.Providers
         [TestCategory("ServicePrincipalTests")]
         public async Task ProbeShouldBeAvailableWithServicePrincipalAndSecretAsync()
         {
-            var provider = new ServicePrincipalTokenProvider(config: new ServicePrincipalConfiguration
+            var config = FakeConfiguration(new List<KeyValuePair<string, string>>
             {
-                ClientId = "foo",
-                ClientSecret = "bar",
-                TenantId = "Bazz"
+                new KeyValuePair<string, string>(Msal.Providers.Constants.AzureClientIdEnvName, "foo"),
+                new KeyValuePair<string, string>(Msal.Providers.Constants.AzureClientSecretEnvName, "bar"),
+                new KeyValuePair<string, string>(Msal.Providers.Constants.AzureTenantIdEnvName, "Bazz")
             });
+            var provider = new ServicePrincipalTokenProvider(config: config);
             Assert.IsTrue(await provider.AvailableAsync().ConfigureAwait(false));
             Assert.IsFalse(provider.IsClientCertificate());
             Assert.IsTrue(provider.IsClientSecret());
@@ -174,12 +188,13 @@ namespace Microsoft.Identity.Extensions.Providers
         [TestCategory("ServicePrincipalTests")]
         public async Task ProbeShouldBeAvailableWithServicePrincipalAndCertificateBase64Async()
         {
-            var provider = new ServicePrincipalTokenProvider(config: new ServicePrincipalConfiguration
+            var config = FakeConfiguration(new List<KeyValuePair<string, string>>
             {
-                ClientId = "foo",
-                CertificateBase64 = "bar",
-                TenantId = "Bazz"
+                new KeyValuePair<string, string>(Msal.Providers.Constants.AzureClientIdEnvName, "foo"),
+                new KeyValuePair<string, string>(Msal.Providers.Constants.AzureCertificateEnvName, "bar"),
+                new KeyValuePair<string, string>(Msal.Providers.Constants.AzureTenantIdEnvName, "Bazz")
             });
+            var provider = new ServicePrincipalTokenProvider(config: config);
             Assert.IsTrue(await provider.AvailableAsync().ConfigureAwait(false));
             Assert.IsTrue(provider.IsClientCertificate());
             Assert.IsFalse(provider.IsClientSecret());
@@ -189,15 +204,15 @@ namespace Microsoft.Identity.Extensions.Providers
         [TestCategory("ServicePrincipalTests")]
         public async Task ProbeShouldThrowIfCertificateIsNotInStoreAsync()
         {
-            var cfg = new ServicePrincipalConfiguration
+            var config = FakeConfiguration(new List<KeyValuePair<string, string>>
             {
-                ClientId = "foo",
-                CertificateThumbprint = "bar",
-                CertificateStoreName = "My",
-                TenantId = "Bazz"
-            };
-            var provider = new ServicePrincipalTokenProvider(config: cfg);
-            var msg = $"Unable to find certificate with thumbprint '{cfg.CertificateThumbprint}' in certificate store named 'My' and store location CurrentUser";
+                new KeyValuePair<string, string>(Msal.Providers.Constants.AzureClientIdEnvName, "foo"),
+                new KeyValuePair<string, string>(Msal.Providers.Constants.AzureCertificateThumbprintEnvName, "bar"),
+                new KeyValuePair<string, string>(Msal.Providers.Constants.AzureCertificateStoreEnvName, "My"),
+                new KeyValuePair<string, string>(Msal.Providers.Constants.AzureTenantIdEnvName, "Bazz")
+            });
+            var provider = new ServicePrincipalTokenProvider(config: config);
+            var msg = $"Unable to find certificate with thumbprint 'bar' in certificate store named 'My' and store location CurrentUser";
             var ex = await Assert.ThrowsExceptionAsync<InvalidOperationException>(async () => await provider.GetTokenAsync(new List<string>{"foo"}).ConfigureAwait(false)).ConfigureAwait(false);
             Assert.AreEqual(msg, ex.Message);
         }
@@ -206,13 +221,14 @@ namespace Microsoft.Identity.Extensions.Providers
         [TestCategory("ServicePrincipalTests")]
         public async Task ProbeShouldBeAvailableWithServicePrincipalAndCertificateThumbAndStoreAsync()
         {
-            var provider = new ServicePrincipalTokenProvider(config: new ServicePrincipalConfiguration
+            var config = FakeConfiguration(new List<KeyValuePair<string, string>>
             {
-                ClientId = "foo",
-                CertificateThumbprint = "bar",
-                CertificateStoreName = "My",
-                TenantId = "Bazz"
+                new KeyValuePair<string, string>(Msal.Providers.Constants.AzureClientIdEnvName, "foo"),
+                new KeyValuePair<string, string>(Msal.Providers.Constants.AzureCertificateThumbprintEnvName, "bar"),
+                new KeyValuePair<string, string>(Msal.Providers.Constants.AzureCertificateStoreEnvName, "My"),
+                new KeyValuePair<string, string>(Msal.Providers.Constants.AzureTenantIdEnvName, "Bazz")
             });
+            var provider = new ServicePrincipalTokenProvider(config: config);
             Assert.IsTrue(await provider.AvailableAsync().ConfigureAwait(false));
             Assert.IsTrue(provider.IsClientCertificate());
             Assert.IsFalse(provider.IsClientSecret());
@@ -222,37 +238,15 @@ namespace Microsoft.Identity.Extensions.Providers
         [TestCategory("ServicePrincipalTests")]
         public async Task ProbeShouldNotBeAvailableWithoutTenantIDAsync()
         {
-            var provider = new ServicePrincipalTokenProvider(config: new ServicePrincipalConfiguration
+            var config = FakeConfiguration(new List<KeyValuePair<string, string>>
             {
-                ClientId = "foo",
-                CertificateThumbprint = "bar",
-                CertificateStoreName = "My",
+                new KeyValuePair<string, string>(Msal.Providers.Constants.AzureClientIdEnvName, "foo"),
+                new KeyValuePair<string, string>(Msal.Providers.Constants.AzureCertificateThumbprintEnvName, "bar"),
+                new KeyValuePair<string, string>(Msal.Providers.Constants.AzureCertificateStoreEnvName, "My")
             });
+            var provider = new ServicePrincipalTokenProvider(config: config);
             Assert.IsFalse(await provider.AvailableAsync().ConfigureAwait(false));
         }
-    }
-
-    internal class ServicePrincipalConfiguration : IServicePrincipalConfiguration
-    {
-        public string ClientId { get; set; }
-
-        public string CertificateBase64 { get; set; }
-
-        public string CertificateThumbprint { get; set; }
-
-        public string CertificateSubjectDistinguishedName { get; set; }
-
-        public string CertificateStoreName { get; set; }
-
-        public string TenantId { get; set; }
-
-        public string ClientSecret { get; set; }
-
-        public string CertificateStoreLocation { get; set; }
-
-        public string Authority => "login.microsoftonline.com";
-
-        public IMsalHttpClientFactory clientFactory { get; set; }
     }
 
     internal class ClientFactory : IMsalHttpClientFactory

@@ -1,5 +1,7 @@
 using System.Collections.Generic;
 using System.Threading.Tasks;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Configuration.EnvironmentVariables;
 
 namespace Microsoft.Identity.Extensions.Msal.Providers
 {
@@ -14,13 +16,14 @@ namespace Microsoft.Identity.Extensions.Msal.Providers
         private readonly ITokenProvider _chain;
 
         /// <inheritdoc />
-        public DefaultTokenProviderChain()
+        public DefaultTokenProviderChain(IConfigurationProvider config = null)
         {
+            config = config ?? new EnvironmentVariablesConfigurationProvider();
             var providers = new List<ITokenProvider>
             {
-                new ServicePrincipalTokenProvider(),
-                new ManagedIdentityTokenProvider(),
-                new SharedTokenCacheProvider()
+                new ServicePrincipalTokenProvider(config),
+                new ManagedIdentityTokenProvider(config),
+                new SharedTokenCacheProvider(config)
             };
             _chain = new TokenProviderChain(providers);
         }
